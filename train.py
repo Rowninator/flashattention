@@ -6,6 +6,8 @@ from model import GPTStyleModel
 from attention import scaled_dot_product_attention, MultiheadAttention
 from attention import make_causal_mask
 
+import matplotlib.pyplot as plt
+
 def get_batch(ids, batch_size, block_size, device="cpu"):
     # ids: a 1D tensor of token ids for the dataset (or a split of it)
 
@@ -46,11 +48,15 @@ val_ids = ids[split_idx:]
 vocab_size = enc.n_vocab
 block_size = 64
 batch_size = 32
+n_steps = 3000
+log_every = 200
 
 model = GPTStyleModel(vocab_size=vocab_size, d_model=128, num_heads=4, d_ff=512, num_layers=4, max_len=block_size)
 optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
 loss_fn = nn.CrossEntropyLoss()
 mask = make_causal_mask(block_size)
+
+history = []
 
 for step in range(3000):
     x, y = get_batch(train_ids, batch_size, block_size)
@@ -63,6 +69,35 @@ for step in range(3000):
     optimizer.step()
 
 
-    if step % 200 == 0:
-        print(f"Step {step}: loss = {loss.item():.4f}")
-        
+    if step % log_every == 0 or step == n_steps -1:
+        model.eval()
+        with torch.no_grad():
+            vx, vy = get_batch(val_ids, batch_size, block_size)
+            vlogits = model(vx, mask)
+            vloss = loss_fn(vlogits.view(-1, vlogits.size(-1)), vy.view(-1))
+        model.train()
+
+        history.append((step, loss.item(), vloss.item()))
+
+with open("loss_log.csv", "w") as f:
+    f.write("step,train_loss,val_loss\n")
+    for step, train_loss, val_loss in history:
+        f.write(f"{step},{train_loss},{val_loss}\n")
+
+
+
+steps = [h[0] for h in history]
+train_losses = [h[1] for h in history]
+val_losses = [h[2] for h in history]
+ 
+plt.figure(figsize=(8, 5))
+plt.plot(steps, train_losses, label="train loss")
+plt.plot(steps, val_losses, label="val loss")
+plt.xlabel("step")
+plt.ylabel("cross entropy loss")
+plt.title("Training loss, tiny Shakespeare")
+plt.legend()
+plt.tight_layout()
+plt.savefig("loss_curve.png")
+ 
+print("Saved loss_log.csv and loss_curve.png")
