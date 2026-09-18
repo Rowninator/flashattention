@@ -30,17 +30,29 @@ class GPTStyleModel(nn.Module):
     def forward(self, token_ids, mask=None):
         seq_len = token_ids.shape[1]
 
+        if past_key_values is None:
+            # fresh start, one empty slot per block, nothing cached yet
+            past_key_values = [None] * len(self.blocks)
+            offset = 0
+        else:
+            # every layer's cache has grown to the same length so far,
+            # so layer 0's key tensor tells us where the new token(s)
+            # actually sit: right after whatever's already cached
+            offset = past_key_values[0][0].shape[2]
+
         # TODO: token embedding + positional encoding (sliced to seq_len),
         # combined the way we just talked through
         x = self.token_embedding(token_ids)
-        x = x + self.pe[:seq_len]
+        x = x + self.pe[offset:offset + seq_len]
 
         # TODO: run x through every block in the stack, in order
-        for block in self.blocks:
-            x = block(x, mask)
+        new_past_key_values = []
+        for block, past_kv in zip(self.blocks, past_key_values):
+            x, new_kv = block(x, mask, past_key_value=past_kv)
+            new_past_key_values.append(new_kv)
 
         # TODO: project to vocab_size and return the logits
         logits = self.output_projection(x)
 
 
-        return logits
+        return logits, new_past_key_values

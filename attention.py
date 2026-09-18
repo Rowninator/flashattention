@@ -27,10 +27,9 @@ class MultiheadAttention(nn.Module):
         self.wq = nn.Linear(d_model, d_model)
         self.wk = nn.Linear(d_model, d_model)
         self.wv = nn.Linear(d_model, d_model)
-
         self.wo = nn.Linear(d_model, d_model)
 
-    def forward(self, q, k, v, mask=None):
+    def forward(self, q, k, v, mask=None, past_key_value=None):
         batch_size = q.shape[0]
 
         q = self.wq(q)
@@ -45,6 +44,27 @@ class MultiheadAttention(nn.Module):
         k = k.transpose(1,2)
         v = v.transpose(1,2)
 
+        # TODO: if past_key_value is not None, it's a (past_k, past_v) tuple
+        # from the previous call. Concatenate it onto this step's freshly
+        # computed k and v. You already worked out which dimension this
+        # needs to happen on, back when you traced through DynamicLayer,
+        # just remember k and v have already been transposed by this point
+        # in your function, so double check that dimension number still
+        # points at seq_len rather than somewhere else now.
+        if past_key_value is not None:
+            past_k, past_v = past_key_value
+            k = torch.cat([past_k, k], dim=2)
+            v = torch.cat([past_v, v], dim=2)
+
+        
+
+
+        # TODO: build the new_past_key_value tuple to return, using k and v
+        # *after* the concatenation above, so it carries the full history
+        # forward, not just whatever came in on this one call
+        new_past_key_value = (k, v)
+
+
         out, atten_weights = scaled_dot_product_attention(q, k, v, mask)
 
         out = out.transpose(1,2)
@@ -53,7 +73,7 @@ class MultiheadAttention(nn.Module):
 
         out = self.wo(out)
 
-        return out, atten_weights
+        return out, atten_weights, new_past_key_value
 
 
 

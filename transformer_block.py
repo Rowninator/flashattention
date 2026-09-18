@@ -23,19 +23,17 @@ class TransformerBlock(nn.Module):
             nn.Linear(d_ff, d_model)
         )
 
-    def forward(self, x, mask=None):
+    def forward(self, x, mask=None, past_key_value=None):
         # TODO: attention sublayer, pre norm + residual:
         # x = x + self.attn(norm(x), norm(x), norm(x), mask)[0]
         # (remember MultiheadAttention returns a tuple)
         normed = self.norm1(x)
-        x = x + self.attn(
-            normed,
-            normed,
-            normed,
-            mask
-        )[0]
+        attn_out, attn_weights, new_past_key_value = self.attn(
+            normed, normed, normed, mask, past_key_value=past_key_value
+        )
 
         # TODO: feedforward sublayer, same pre norm + residual pattern
+        x = x + attn_out
         x = x + self.ff(self.norm2(x))
 
-        return x
+        return x, attn_weights, new_past_key_value
