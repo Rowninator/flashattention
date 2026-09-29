@@ -43,6 +43,39 @@ class MultiheadAttention(nn.Module):
         return out, attn_weights, new_past_key_value
 
 
+class GroupedQueryAttention(nn.Module):
+    def __init__(self, d_model, num_heads, num_kv_heads):
+        super().__init__()
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.num_kv_heads = num_kv_heads
+        self.head_dim = d_model // num_heads
+        self.wq = nn.Linear(d_model, d_model)
+        self.wk = nn.Linear(d_model, num_kv_heads * self.head_dim)
+        self.wv = nn.Linear(d_model, num_kv_heads * self.head_dim)
+        self.wo = nn.Linear(d_model, d_model)
+
+    def forward(self, q, k, v, mask=None, past_key_value=None):
+        batch_size = q.shape[0]
+        q = self.wq(q)
+        k = self.wk(k)
+        v = self.wv(v)
+        q = q.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        k = k.view(batch_size, -1, self.num_kv_heads, self.head_dim).transpose(1, 2)
+        v = v.view(batch_size, -1, self.num_kv_heads, self.head_dim).transpose(1, 2)
+        if past_key_value is not None:
+            past_k, past_v = past_key_value
+            k = torch.cat([past_k, k], dim=2)
+            v = torch.cat([past_v, v], dim=2)
+        new_past_key_value = (k, v)
+        k_expanded = k.repeat_interleave(self.num_heads // self.num_kv_heads, dim=1)
+        v_expanded = v.repeat_interleave(self.num_heads // self.num_kv_heads, dim=1)
+        out, attn_weights = scaled_dot_product_attention(q, k_expanded, v_expanded, mask)
+        out = out.transpose(1, 2).contiguous().view(batch_size, -1, self.d_model)
+        out = self.wo(out)
+        return out, attn_weights, new_past_key_value
+
+
 def make_causal_mask(seq_len):
     keep = torch.tril(torch.ones(seq_len, seq_len, dtype=torch.bool))
     mask = torch.zeros(seq_len, seq_len)
