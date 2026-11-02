@@ -1,0 +1,4 @@
+Num new tokens:   10 | Uncached: 0.0158s | Cached: 0.0090s | Speedup: 1.75x
+Num new tokens:   50 | Uncached: 0.1020s | Cached: 0.0640s | Speedup: 1.59x
+Num new tokens:  100 | Uncached: 0.1866s | Cached: 0.1166s | Speedup: 1.60x
+Num new tokens:  200 | Uncached: 0.3699s | Cached: 0.2086s | Speedup: 1.77x
